@@ -14,8 +14,13 @@ CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
 WATCHLIST = os.getenv("WATCHLIST", "AAPL,MSFT,SPY").split(",")
 
 def fetch_data(symbols, period="1y"):
-    data = yf.download(symbols, period=period, progress=False)["Close"]
-    return data
+    data = yf.download(symbols, period=period, progress=False, multi_level_index=False)
+    close = pd.DataFrame()
+    for sym in symbols:
+        col = f"Close_{sym}"
+        if col in data.columns:
+            close[sym] = data[col]
+    return close   
 
 def compute_indicators(df):
     out = pd.DataFrame(index=df.index, columns=df.columns)
