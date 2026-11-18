@@ -64,8 +64,13 @@ def build_message(prices, weights):
         chg   = (price / prices[sym].iloc[-2] - 1) * 100
         alloc = weights.get(sym, 0)
 
-        if price < ma200 and rsi < 30:
+                if price < ma200 and rsi < 30:
             action = "🟢 OVERWEIGHT — oversold, below trend"
         elif price > ma200 and rsi > 70:
             action = "🔴 UNDERWEIGHT — overbought, stretched"
-        elif price   
+        elif price > ma200 and rsi < 50:
+            action = "🟡 ADD — uptrend, not yet overbought"
+        elif price < ma200 and rsi > 50:
+            action = "🟠 TRIM — downtrend, still elevated"
+        else:
+            action = "⚪ HOLD — neutral"   
