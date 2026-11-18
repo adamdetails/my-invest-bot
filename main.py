@@ -5,6 +5,7 @@ import ta
 import requests
 import os
 from dotenv import load_dotenv
+from tradingview_screener import Query, col
 
 load_dotenv()
 
@@ -24,8 +25,7 @@ def max_sharpe(returns):
     n = len(returns.columns)
     mu = returns.mean() * 252
     cov = returns.cov() * 252
-    excess = mu  # assume rf=0 for simplicity
-    # Solve for max Sharpe: w = cov^-1 * excess
+    excess = mu
     try:
         w = np.linalg.inv(cov.values) @ excess.values
         w = np.clip(w, 0, None)
@@ -33,6 +33,22 @@ def max_sharpe(returns):
         return pd.Series(w, index=returns.columns)
     except:
         return pd.Series(1/n, index=returns.columns)
+
+def get_early_movers():
+    try:
+        result = (Query()
+            .select('ticker', 'name', 'close', 'close|1', 'relative_volume_10d_calc', 'market_cap_basic')
+            .where(
+                col('market_cap_basic').between(100_000_000, 5_000_000_000),
+                col('relative_volume_10d_calc') > 2,
+                col('close') > 1
+            )
+            .order_by('relative_volume_10d_calc', ascending=False)
+            .limit(5)
+            .get_scanner_data())
+        return result
+    except Exception as e:
+        return None
 
 def build_message(prices, weights):
     latest = prices.iloc[-1]
@@ -48,43 +64,8 @@ def build_message(prices, weights):
         chg   = (price / prices[sym].iloc[-2] - 1) * 100
         alloc = weights.get(sym, 0)
 
-        # Signal logic
         if price < ma200 and rsi < 30:
             action = "🟢 OVERWEIGHT — oversold, below trend"
         elif price > ma200 and rsi > 70:
             action = "🔴 UNDERWEIGHT — overbought, stretched"
-        elif price > ma200 and rsi < 50:
-            action = "🟡 ADD — uptrend, not yet overbought"
-        elif price < ma200 and rsi > 50:
-            action = "🟠 TRIM — downtrend, still elevated"
-        else:
-            action = "⚪ HOLD — neutral"
-
-        lines.append(
-            f"{sym}: ${price:.2f} ({chg:+.1f}%)\n"
-            f"  Suggested: {alloc:.1%} | {action}\n"
-            f"  MA200: ${ma200:.2f} | RSI: {rsi:.0f}"
-        )
-
-    lines += ["", "*Model: Max Sharpe (1yr). Advisory only, not financial advice.*"]
-    return "\n".join(lines)
-
-def send_telegram(text):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, json={
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True,
-    })
-
-def main():
-    prices  = fetch_data(WATCHLIST)
-    returns = prices.pct_change().dropna()
-    weights = max_sharpe(returns)
-    msg     = build_message(prices, weights)
-    send_telegram(msg)
-    print("Digest sent.")
-
-if __name__ == "__main__":
-    main()   
+        elif price   
