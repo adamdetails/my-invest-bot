@@ -11,7 +11,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
-WATCHLIST = os.getenv("WATCHLIST", "AAPL,MSFT,SPY").split(",")
+WATCHLIST = [s.strip() for s in os.getenv("WATCHLIST", "AAPL,MSFT,SPY").split(",") if s.strip()]   
 
 def fetch_data(symbols, period="1y"):
     data = yf.download(symbols, period=period, progress=False, multi_level_index=False)
