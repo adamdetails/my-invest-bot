@@ -1,7 +1,7 @@
 yfinance
 pandas
 numpy
-riskfolio-lib
 python-dotenv
 requests
 ta
+tradingview-screener   
