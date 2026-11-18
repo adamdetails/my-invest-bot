@@ -1,7 +1,6 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import riskfolio as rp
 import ta
 import requests
 import os
@@ -31,10 +30,8 @@ def compute_indicators(df):
     return out
 
 def optimize_portfolio(returns):
-    port = rp.Portfolio(returns=returns)
-    port.assets_stats(method_mu="hist", method_cov="hist")
-    w = port.optimization(model="Classic", rm="MV", obj="MinRisk", rf=0, hist=True)
-    return w.iloc[:, 0]
+    n = len(returns.columns)
+    return pd.Series(1/n, index=returns.columns)   
 
 def build_message(ind, weights):
     latest = ind.iloc[-1]
