@@ -39,7 +39,7 @@ def max_sharpe(returns):
 
 def get_early_movers():
     try:
-        result = (
+        _, df = (
             Query()
             .select(
                 "ticker", "name", "close", "close|1",
@@ -54,7 +54,7 @@ def get_early_movers():
             .limit(5)
             .get_scanner_data()
         )
-        return result
+        return df
     except:
         return None
 
