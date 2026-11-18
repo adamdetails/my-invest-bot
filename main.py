@@ -10,7 +10,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
-WATCHLIST = [s.strip() for s in os.getenv("WATCHLIST", "AAPL,MSFT,SPY").split(",") if s.strip()]   
+WATCHLIST = [s.strip() for s in os.getenv("WATCHLIST", "AAPL,MSFT,SPY").split(",") if s.strip()]
 
 def fetch_data(symbols, period="1y"):
     close = pd.DataFrame()
@@ -18,45 +18,55 @@ def fetch_data(symbols, period="1y"):
         df = yf.download(sym, period=period, progress=False)
         if not df.empty:
             close[sym] = df["Close"]
-    return close.dropna()   
+    return close.dropna()
 
-def compute_indicators(df):
-    out = pd.DataFrame(index=df.index, columns=df.columns)
-    for col in df.columns:
-        out[f"{col}_price"] = df[col]
-        out[f"{col}_ma200"] = df[col].rolling(200).mean()
-        out[f"{col}_rsi"]   = ta.momentum.RSIIndicator(df[col], window=14).rsi()
-    return out
-
-def optimize_portfolio(returns):
+def max_sharpe(returns):
     n = len(returns.columns)
-    return pd.Series(1/n, index=returns.columns)   
+    mu = returns.mean() * 252
+    cov = returns.cov() * 252
+    excess = mu  # assume rf=0 for simplicity
+    # Solve for max Sharpe: w = cov^-1 * excess
+    try:
+        w = np.linalg.inv(cov.values) @ excess.values
+        w = np.clip(w, 0, None)
+        w = w / w.sum()
+        return pd.Series(w, index=returns.columns)
+    except:
+        return pd.Series(1/n, index=returns.columns)
 
-def build_message(ind, weights):
-    latest = ind.iloc[-1]
-    prev   = ind.iloc[-2]
-    lines = ["📊 *Daily Investment Digest*", ""]
+def build_message(prices, weights):
+    latest = prices.iloc[-1]
+    prev   = prices.iloc[-2]
+    lines = ["📊 *Daily Digest — Suggestions*", ""]
 
     for sym in WATCHLIST:
-        price = latest[f"{sym}_price"]
-        ma200 = latest[f"{sym}_ma200"]
-        rsi   = latest[f"{sym}_rsi"]
-        chg   = (price / prev[f"{sym}_price"] - 1) * 100
+        if sym not in prices.columns:
+            continue
+        price = prices[sym].iloc[-1]
+        ma200 = prices[sym].rolling(200).mean().iloc[-1]
+        rsi   = ta.momentum.RSIIndicator(prices[sym], window=14).rsi().iloc[-1]
+        chg   = (price / prices[sym].iloc[-2] - 1) * 100
+        alloc = weights.get(sym, 0)
 
-        signal = "🟢" if price < ma200 and rsi < 30 else "⚪"
-        if price > ma200 and rsi > 70:
-            signal = "🔴"
+        # Signal logic
+        if price < ma200 and rsi < 30:
+            action = "🟢 OVERWEIGHT — oversold, below trend"
+        elif price > ma200 and rsi > 70:
+            action = "🔴 UNDERWEIGHT — overbought, stretched"
+        elif price > ma200 and rsi < 50:
+            action = "🟡 ADD — uptrend, not yet overbought"
+        elif price < ma200 and rsi > 50:
+            action = "🟠 TRIM — downtrend, still elevated"
+        else:
+            action = "⚪ HOLD — neutral"
 
         lines.append(
-            f"{signal} {sym}: ${price:.2f} ({chg:+.1f}%)\n"
-            f"    MA200: ${ma200:.2f} | RSI: {rsi:.0f}"
+            f"{sym}: ${price:.2f} ({chg:+.1f}%)\n"
+            f"  Suggested: {alloc:.1%} | {action}\n"
+            f"  MA200: ${ma200:.2f} | RSI: {rsi:.0f}"
         )
 
-    lines += ["", "*Suggested Allocation (Risk Parity):*"]
-    for sym, w in weights.items():
-        lines.append(f"  {sym}: {w:.1%}")
-
-    lines += ["", "_Advisory only — not financial advice._"]
+    lines += ["", "*Model: Max Sharpe (1yr). Advisory only, not financial advice.*"]
     return "\n".join(lines)
 
 def send_telegram(text):
@@ -71,9 +81,8 @@ def send_telegram(text):
 def main():
     prices  = fetch_data(WATCHLIST)
     returns = prices.pct_change().dropna()
-    ind     = compute_indicators(prices)
-    weights = optimize_portfolio(returns)
-    msg     = build_message(ind, weights)
+    weights = max_sharpe(returns)
+    msg     = build_message(prices, weights)
     send_telegram(msg)
     print("Digest sent.")
 
